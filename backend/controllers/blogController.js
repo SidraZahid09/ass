@@ -1,3 +1,4 @@
+
 const db = require("../config/db");
 
 function publicPost(row) {
@@ -14,13 +15,19 @@ function publicPost(row) {
 
 async function getLatestPosts(_req, res, next) {
   try {
-    const [rows] = await db.execute(
-      `SELECT id, title, slug, excerpt, content, cover_image, published_at, created_at
-       FROM posts WHERE status = 'published'
-       ORDER BY published_at DESC, id DESC LIMIT 3`
+    const result = await db.query(
+      `SELECT id, title, slug, excerpt, content, cover_image,
+              published_at, created_at
+       FROM posts
+       WHERE status = 'published'
+       ORDER BY published_at DESC NULLS LAST, id DESC
+       LIMIT 3`
     );
-    res.json({ posts: rows.map(publicPost) });
-  } catch (error) { next(error); }
+
+    res.json({ posts: result.rows.map(publicPost) });
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function getPosts(req, res, next) {
@@ -32,46 +39,71 @@ async function getPosts(req, res, next) {
 
     let where = "status = 'published'";
     const params = [];
+
     if (q) {
-      where += " AND (title LIKE ? OR excerpt LIKE ? OR content LIKE ?)";
-      const term = `%${q}%`;
-      params.push(term, term, term);
+      where += " AND (title ILIKE $1 OR excerpt ILIKE $1 OR content ILIKE $1)";
+      params.push(`%${q}%`);
     }
 
-    const [countRows] = await db.execute(
-      `SELECT COUNT(*) AS total FROM posts WHERE ${where}`, params
+    const countResult = await db.query(
+      `SELECT COUNT(*) AS total FROM posts WHERE ${where}`,
+      params
     );
-    const total = Number(countRows[0].total);
 
-    const [rows] = await db.execute(
-      `SELECT id, title, slug, excerpt, cover_image, published_at, created_at
-       FROM posts WHERE ${where}
-       ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?`,
+    const total = Number(countResult.rows[0].total);
+
+    const limitPosition = params.length + 1;
+    const offsetPosition = params.length + 2;
+
+    const result = await db.query(
+      `SELECT id, title, slug, excerpt, cover_image,
+              published_at, created_at
+       FROM posts
+       WHERE ${where}
+       ORDER BY published_at DESC NULLS LAST, id DESC
+       LIMIT $${limitPosition} OFFSET $${offsetPosition}`,
       [...params, perPage, offset]
     );
 
     res.json({
-      posts: rows.map(publicPost),
+      posts: result.rows.map(publicPost),
       pagination: {
-        page, perPage, total,
+        page,
+        perPage,
+        total,
         pages: Math.ceil(total / perPage)
       }
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function getPostBySlug(req, res, next) {
   try {
-    const [rows] = await db.execute(
-      `SELECT id, title, slug, excerpt, content, cover_image, published_at, created_at
-       FROM posts WHERE slug = ? AND status = 'published' LIMIT 1`,
+    const result = await db.query(
+      `SELECT id, title, slug, excerpt, content, cover_image,
+              published_at, created_at
+       FROM posts
+       WHERE slug = $1 AND status = 'published'
+       LIMIT 1`,
       [String(req.params.slug)]
     );
-    if (!rows.length) {
-      return res.status(404).json({ message: "Article not found." });
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        message: "Article not found."
+      });
     }
-    res.json({ post: publicPost(rows[0]) });
-  } catch (error) { next(error); }
+
+    res.json({ post: publicPost(result.rows[0]) });
+  } catch (error) {
+    next(error);
+  }
 }
 
-module.exports = { getLatestPosts, getPosts, getPostBySlug };
+module.exports = {
+  getLatestPosts,
+  getPosts,
+  getPostBySlug
+};

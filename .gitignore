@@ -7,3 +7,4 @@ frontend/dist/
 !.env.example
 .DS_Store
 npm-debug.log*
+migrate-to-supabase.js
