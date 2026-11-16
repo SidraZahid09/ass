@@ -1,0 +1,1 @@
+const r=require("express").Router(),auth=require("../middleware/requireAdmin"),c=require("../controllers/adminPostController");r.use(auth);r.get("/posts",c.list);r.post("/posts",c.create);r.put("/posts/:id",c.update);r.delete("/posts/:id",c.remove);module.exports=r;
